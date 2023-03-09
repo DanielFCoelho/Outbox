@@ -1,10 +1,10 @@
-﻿using DepositOrderProcessing.Domain;
+﻿using Newtonsoft.Json;
 
-namespace Outbox.Domain;
+namespace DepositOrderCreationCAP.Domain;
 
 public class DepositOrder
-{
-    public Guid Id { get; set; }
+{    
+    public Guid Id { get; private set; }
     public decimal Amount { get; set; }
     public DepositOrderStatus Status { get; set; }
 
@@ -14,6 +14,8 @@ public class DepositOrder
     {
         get { return _transactions.AsReadOnly(); }
     }
+
+    public void GenerateNewId() => Id = Guid.NewGuid();
 
     public void Process()
     {

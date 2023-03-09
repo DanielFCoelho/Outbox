@@ -1,6 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using DepositOrderCreation.Domain;
+using Microsoft.EntityFrameworkCore;
 using Outbox.Domain;
-using System.Transactions;
 
 namespace DepositOrderCreation.Database
 {
@@ -11,6 +11,7 @@ namespace DepositOrderCreation.Database
             Database.EnsureCreated();
         }
 
-        public DbSet<DepositOrder> DepositOrders { get; set; }        
+        public DbSet<DepositOrder> DepositOrders { get; set; }
+        public DbSet<OutboxEvent> IntegrationEventOutbox { get; set; }
     }
 }
