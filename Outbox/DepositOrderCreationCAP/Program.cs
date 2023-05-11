@@ -1,7 +1,10 @@
 using DepositOrderCreationCAP.Database;
 using DepositOrderCreationCAP.Domain;
+using DepositOrderCreationCAP.Receivers;
+using DepositOrderCreationCAP.ViewModels;
 using DotNetCore.CAP;
 using DotNetCore.CAP.Dashboard.NodeDiscovery;
+using DotNetCore.CAP.Messages;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -18,17 +21,26 @@ builder.Services.AddDbContext<DOCreationContext>(opt => opt.UseSqlServer("Server
 
 builder.Services.AddCap(opt =>
 {
+    //opt.DefaultGroupName = ""; O nome padrão do grupo de consumidores corresponde a diferentes nomes em diferentes transportes. Você pode personalizar esse valor para personalizar os nomes nos transportes para facilitar a visualização.
+    //opt.GroupNamePrefix = ""; //Adiciona prefixos unificados para o grupo de consumidores.
+    //opt.TopicNamePrefix = ""; //Adiciona prefixos unificados para o tópico/fila de consumidores.
+    opt.Version = "v1";
+    opt.UseStorageLock = false; // Se for true, uma nova tabela é criara para resolver problemas de concorrência.
+    opt.CollectorCleaningInterval = 300; // intervalo em que as mensagens expiradas são deletadas.
+    opt.ConsumerThreadCount = 1; //Número de threads simultaneas consumidas. Se for maior que 1, a order de execução não é garantida.
+    opt.FailedRetryCount = 10; // Número de retries
+    opt.FailedThresholdCallback = (FailedInfo failedInfo) => { Console.WriteLine($"Erro no callback: {failedInfo.Message}"); }; // Ação executada depois que a quantidade de retries é atingida
+    opt.SucceedMessageExpiredAfter = (365 * 24 * 3600); //Tempo de expiração de mensagem com sucesso.
+    opt.FailedMessageExpiredAfter = (365 * 24 * 3600); //Tempo de expiração de mensagem com erro.
+    
     opt.UseEntityFramework<DOCreationContext>(k =>
     {
         k.Schema = "dbo";
     });
-
-    opt.SucceedMessageExpiredAfter = (365 * 24 * 3600);
-    opt.FailedMessageExpiredAfter = (365 * 24 * 3600);
     opt.UseAzureServiceBus(k =>
     {
-        k.ConnectionString = "sb-pipo-core-dev.servicebus.windows.net";
-        k.TopicPath = "pipo";        
+        k.ConnectionString = "Endpoint=sb://sb-caas-core-dev.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=sAJQ526PW5TvUa2c9dFPxYw8Qf1U5W/Pf+ASbEJBJw8=";
+        k.TopicPath = "sbt-cap-events-test";
     });
     opt.UseDashboard(k => k.PathMatch = "/myCap");
     opt.UseDiscovery(k =>
@@ -36,11 +48,15 @@ builder.Services.AddCap(opt =>
         k.DiscoveryServerHostName = "localhost";
         k.DiscoveryServerPort = 8500;
         k.CurrentNodeHostName = "localhost";
-        k.CurrentNodePort = 5800;
+        k.CurrentNodePort = 5239;
         k.NodeId = "1";
-        k.NodeName = "CAP No.1 Node";        
+        k.NodeName = "CAP No.1 Node";
     });
 });
+
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddTransient<Receiver>();
 
 var app = builder.Build();
 
@@ -60,18 +76,24 @@ app.MapGet("DepositOrders", async ([FromServices] DOCreationContext context) => 
 
 app.MapPost("DepositOrders", async ([FromServices] DOCreationContext context, [FromServices] ICapPublisher publisher, [FromBody] DepositOrder depositOrder) =>
 {
-    using var transaction = await context.Database.BeginTransactionAsync(publisher);
+    try
+    {
+        using var transaction = await context.Database.BeginTransactionAsync(publisher);
 
-    depositOrder.GenerateNewId();
-    await context.DepositOrders.AddAsync(depositOrder);
-    await context.SaveChangesAsync();
+        depositOrder.GenerateNewId();
+        await context.DepositOrders.AddAsync(depositOrder);
+        await context.SaveChangesAsync();
 
-    await publisher.PublishAsync("teste", depositOrder);
+        await publisher.PublishAsync("receiveMessage", new DepositOrderCreateEventViewModel { DepositOrderId = depositOrder.Id }, "receiveCallBack");
 
-    await transaction.CommitAsync();
+        await transaction.CommitAsync();
+    }
+    catch (Exception ex)
+    {
+        throw ex;
+    }
 
 });
-
 
 
 app.Run();

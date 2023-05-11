@@ -7,5 +7,11 @@ public class Transaction
     public DateTimeOffset Date { get; set; }
     public DepositOrder DepositOrder { get; set; }
     public Guid DepositOrderId { get; set; }
+
+    public Transaction(DateTimeOffset date, Guid depositOrderId)
+    {        
+        Date = date;
+        DepositOrderId = depositOrderId;
+    }
 }
 

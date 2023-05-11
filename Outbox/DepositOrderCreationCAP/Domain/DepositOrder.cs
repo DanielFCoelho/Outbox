@@ -3,9 +3,11 @@
 namespace DepositOrderCreationCAP.Domain;
 
 public class DepositOrder
-{    
+{
+    [JsonIgnore]
     public Guid Id { get; private set; }
     public decimal Amount { get; set; }
+    [JsonIgnore]
     public DepositOrderStatus Status { get; set; }
 
     private List<Transaction> _transactions = new List<Transaction>();
@@ -20,7 +22,13 @@ public class DepositOrder
     public void Process()
     {
         Status = DepositOrderStatus.Processed;
-        _transactions.Add(new Transaction { Id = Guid.NewGuid(), Date = DateTimeOffset.UtcNow });
+        var transact = new Transaction(DateTimeOffset.UtcNow, Id);
+        AddTransaction(transact);
+    }
+
+    private void AddTransaction(Transaction transaction)
+    {
+        _transactions.Add(transaction);
     }
 }
 
